@@ -15,7 +15,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.rk.xededitor"
+        applicationId = "com.pycode.xed"
         minSdk = 26
 
         targetSdk = 37
