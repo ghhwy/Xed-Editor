@@ -117,7 +117,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-DEBUG"
-            resValue("string", "app_name", "Xed-Debug")
+            resValue("string", "app_name", "PyCode")
         }
 
         create("benchmark") {
