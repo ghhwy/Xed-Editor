@@ -72,9 +72,20 @@ class XedApplication : App() {
                 "com.termux.RUN_COMMAND_PATH",
                 "/data/data/com.termux/files/usr/bin/sh"
             )
+            // PyCode 补丁：启动时改为让 Termux 执行 sdcard 上的 boot.sh。
+            // boot.sh 负责：① 同步 _engine/ 里的脚本进 ~/  ② 执行「命令信箱」cmd.sh
+            //               ③ 拉起守护进程 + 补全服务
+            // 好处：改脚本 / 下发命令都不用再手动进 Termux；boot.sh 不存在时退回老行为。
+            val boot = File("/sdcard/PythonProjects/_engine/boot.sh")
+            val cmd =
+                if (boot.exists()) {
+                    "sh " + boot.absolutePath + " >> /sdcard/PythonProjects/_engine/boot.log 2>&1"
+                } else {
+                    "sh /data/data/com.termux/files/home/lsp.sh daemon"
+                }
             i.putExtra(
                 "com.termux.RUN_COMMAND_ARGUMENTS",
-                arrayOf("/data/data/com.termux/files/home/lsp.sh", "daemon")
+                arrayOf("-c", cmd)
             )
             i.putExtra(
                 "com.termux.RUN_COMMAND_WORKDIR",
