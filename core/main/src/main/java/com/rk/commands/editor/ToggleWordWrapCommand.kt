@@ -16,7 +16,8 @@ class ToggleWordWrapCommand : EditorCommand() {
 
     override fun execute(context: EditorActionContext) {
         val editor = context.editor
-        editor.setWordwrap(!editor.isWordwrap, true, true)
+        // PyCode：改用安全切换，避免 soraX 在 wordwrap 模式切换时的 NPE（详见 Editor.setWordwrapSafely）
+        editor.setWordwrapSafely(!editor.isWordwrap, true, true)
     }
 
     override fun getIcon(): Icon = Icon.ResourceIcon(drawables.edit_note)

@@ -194,7 +194,19 @@ class Editor : CodeEditor {
         }
     }
 
+    // PyCode 修复：sora 的 getText() 标了 @NonNull，但编辑器在 setText() 之前实际为 null，
+    // 这里必须做一次真实判空（否则 Kotlin 会给出 SENSELESS_COMPARISON 警告）。
+    @Suppress("SENSELESS_COMPARISON")
     fun applySettings() {
+        // PyCode 修复：编辑器还没装载文本（text == null）时，setTextSize / setWordwrap 会走
+        // createLayout()，用 null Content 去构建布局，直接抛 NullPointerException
+        // （表现为「改设置就闪退」）。这类编辑器（虚拟 tab、文件尚未装载等）在这里跳过；
+        // 文本装载完成后 CodeEditorCompose 会再调用一次 applySettings() 把设置补上。
+        if (text == null) {
+            android.util.Log.w("PyCode", "applySettings 跳过：编辑器文本尚未装载")
+            return
+        }
+
         val tabSize = Settings.tab_size
         val pinLineNumber = Settings.pin_line_number
         val stickyScroll = Settings.sticky_scroll
@@ -226,7 +238,7 @@ class Editor : CodeEditor {
         isLineNumberEnabled = showLineNumber
         isCursorAnimationEnabled = cursorAnimation
         setTextSize(textSize.toFloat())
-        setWordwrap(wordWrap, true, true)
+        setWordwrapSafely(wordWrap, true, true)
         lineSpacingMultiplier = lineSpacing
         isDisableSoftKbdIfHardKbdAvailable = hideSoftKbd
         showSuggestions(keyboardSuggestion)
@@ -256,6 +268,33 @@ class Editor : CodeEditor {
 
         lineNumberMarginLeft = 9f
         searcher.isEnsureOccurrenceVisible = true
+    }
+
+    /**
+     * PyCode：安全地切换 word wrap。
+     *
+     * soraX 在 wordwrap「模式切换」时（LineBreakLayout <-> WordwrapLayout）会先调用
+     * layout.destroyLayout()（该方法会把旧布局内部的 Content 引用置为 null），然后才构造新布局；
+     * 而 WordwrapLayout 的构造函数里会通过 measureTextRegionOffset() -> hasSideHintIcons()
+     * -> getFirstVisibleLine() 去访问「那个已被销毁的旧布局」，
+     * 于是 text.getLineCount() 抛 NullPointerException，应用闪退（「改设置就闪退」的真正元凶）。
+     *
+     * 规避办法：切换期间临时关闭行号显示，measureTextRegionOffset() 就不会走 hasSideHintIcons()
+     * 这条分支；切换完成后再恢复行号（此时旧布局是完整的，sora 重建布局是安全的）。
+     */
+    fun setWordwrapSafely(wordwrap: Boolean, antiWordBreaking: Boolean = true, supportRtlRow: Boolean = true) {
+        if (isWordwrap == wordwrap) {
+            setWordwrap(wordwrap, antiWordBreaking, supportRtlRow)
+            return
+        }
+
+        val lineNumberWasEnabled = isLineNumberEnabled
+        isLineNumberEnabled = false
+        try {
+            setWordwrap(wordwrap, antiWordBreaking, supportRtlRow)
+        } finally {
+            isLineNumberEnabled = lineNumberWasEnabled
+        }
     }
 
     fun applySettings(resourceProperties: ResourceProperties) {

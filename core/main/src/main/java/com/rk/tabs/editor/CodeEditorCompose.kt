@@ -96,10 +96,9 @@ fun EditorTab.CodeEditor(
                     ownerTab = this@CodeEditor
 
                     editable = editorState.editable
-                    val isTxtFile = file?.getName()?.endsWith(".txt") ?: (fallbackExtension == "txt")
-                    if (Settings.word_wrap_text && isTxtFile) {
-                        setWordwrap(true, true, true)
-                    }
+                    // PyCode 修复：原先在这里（文本还没装载时）就调用 setWordwrap(...)，
+                    // 此时 sora 内部 Content 仍为 null，构造 WordwrapLayout 会抛 NPE 闪退。
+                    // 已挪到下面 setText() 之后应用。
                     id = View.generateViewId()
                     layoutParams = ConstraintLayout.LayoutParams(ConstraintLayout.LayoutParams.MATCH_PARENT, 0)
 
@@ -126,6 +125,16 @@ fun EditorTab.CodeEditor(
                                 // Save newly created Content instance from setText(...)
                                 if (content == null) {
                                     editorState.content = text
+                                }
+
+                                // PyCode 修复：文本装载完成后补一次设置应用
+                                // （Editor 构造时 text 还是 null，那一次 applySettings 会被跳过），
+                                // 并在这里补上 .txt 文件的自动换行设置。
+                                applySettings()
+
+                                val isTxtFile = file?.getName()?.endsWith(".txt") ?: (fallbackExtension == "txt")
+                                if (Settings.word_wrap_text && isTxtFile) {
+                                    setWordwrapSafely(true, true, true)
                                 }
 
                                 editorState.contentRendered.complete(Unit)

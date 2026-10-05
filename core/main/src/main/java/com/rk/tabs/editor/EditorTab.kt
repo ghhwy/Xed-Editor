@@ -290,13 +290,13 @@ open class EditorTab(
 
             val isTxtFile = file?.getName()?.endsWith(".txt") ?: (fallbackExtension == "txt")
             if (Settings.word_wrap_text && isTxtFile) {
-                // PyCode 修复：编辑器可能还没初始化完（内部 Content 仍为 null），
-                // 此时 setWordwrap -> createLayout 会抛 NullPointerException 导致应用闪退。
-                // 改设置时不再崩溃，失败只是忽略这一项。
-                runCatching { setWordwrap(true, true, true) }
-                    .onFailure {
-                        android.util.Log.e("PyCode", "setWordwrap 失败（已忽略，避免闪退）", it)
-                    }
+                // PyCode 修复：改用 setWordwrapSafely() 绕开 soraX 在 wordwrap 模式切换时的 NPE
+                // （它会先销毁旧布局、把旧布局的 Content 置空，再构造新布局，而新布局构造过程中
+                // 会回调 getFirstVisibleLine() 去访问那个已销毁的旧布局）。
+                // 注意：不要再包 runCatching——把异常吞掉会把编辑器留在
+                // 「wordwrap 已置位、布局已销毁」的坏状态，下一次改设置会崩在
+                // Editor.applySettings -> setTextSize。
+                setWordwrapSafely(true, true, true)
             }
         }
     }
