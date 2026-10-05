@@ -2,7 +2,6 @@ package com.rk.commands.global
 
 import android.content.Intent
 import android.view.KeyEvent
-import com.rk.activities.terminal.Terminal
 import com.rk.commands.ActionContext
 import com.rk.commands.GlobalCommand
 import com.rk.commands.KeyCombination
@@ -12,6 +11,7 @@ import com.rk.resources.drawables
 import com.rk.resources.getString
 import com.rk.resources.strings
 
+/** PyCode 改造：终端命令 → 直接跳转到 Termux 应用 */
 object TerminalCommand : GlobalCommand() {
     override val id: String = "global.terminal"
 
@@ -19,8 +19,13 @@ object TerminalCommand : GlobalCommand() {
 
     override fun execute(context: ActionContext) {
         val activity = context.currentActivity
-        val intent = Intent(activity, Terminal::class.java)
-        activity.startActivity(intent)
+        try {
+            val intent = Intent()
+            intent.setClassName("com.termux", "com.termux.app.TermuxActivity")
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            activity.startActivity(intent)
+        } catch (_: Throwable) {
+        }
     }
 
     override fun isSupported(): Boolean = FeatureRegistry.isEnabled("feature_terminal")

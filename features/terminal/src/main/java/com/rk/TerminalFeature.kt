@@ -2,51 +2,30 @@ package com.rk
 
 import android.app.Application
 import android.content.Intent
-import com.rk.activities.main.MainActivity
-import com.rk.activities.settings.SettingsRoutes
-import com.rk.activities.terminal.Terminal
 import com.rk.commands.CommandProvider
 import com.rk.commands.ToolbarConfiguration
 import com.rk.commands.global.TerminalCommand
-import com.rk.drawer.AddProjectCategory
-import com.rk.drawer.AddProjectOption
-import com.rk.drawer.AddProjectRegistry
-import com.rk.exec.pendingCommand
-import com.rk.exec.ubuntuProcess
-import com.rk.extension.api.DynamicRoute
 import com.rk.feature.Feature
 import com.rk.feature.FeatureRegistry
 import com.rk.feature.FeatureToggle
 import com.rk.file.FileObject
 import com.rk.file.FileWrapper
-import com.rk.file.sandboxHomeDir
 import com.rk.filetree.FileAction
 import com.rk.filetree.FileActionContext
 import com.rk.filetree.FileActionProvider
 import com.rk.filetree.FileActionType
 import com.rk.icons.Icon
-import com.rk.lsp.LspRegistry
-import com.rk.lsp.servers.Bash
-import com.rk.lsp.servers.CSS
-import com.rk.lsp.servers.Emmet
-import com.rk.lsp.servers.HTML
-import com.rk.lsp.servers.TypeScript
-import com.rk.lsp.servers.XML
 import com.rk.resources.drawables
 import com.rk.resources.getString
 import com.rk.resources.strings
-import com.rk.runner.RunnerManager
-import com.rk.runner.runners.UniversalRunner
-import com.rk.settings.Settings
-import com.rk.settings.SettingsCategory
-import com.rk.settings.SettingsRegistry
-import com.rk.settings.editor.TerminalFontScreen
-import com.rk.settings.terminal.SettingsTerminalScreen
-import com.rk.settings.terminal.TerminalCheckScreen
-import com.rk.settings.terminal.TerminalExtraKeys
-import com.rk.utils.dialogRes
 import com.rk.utils.toast
 
+/**
+ * PyCode 改造版 TerminalFeature
+ *
+ *  - 所有「终端」入口都跳转到 Termux 应用（不再用自带 PRoot 沙箱）
+ *  - 不再注册：终端设置 UI、UniversalRunner、内置沙箱 LSP 服务器、沙箱进程提供者
+ */
 class TerminalFeature : Feature {
     override val toggle =
         FeatureToggle(
@@ -56,114 +35,40 @@ class TerminalFeature : Feature {
             icon = Icon.ResourceIcon(drawables.terminal),
         )
 
-    private var settingsCategory: SettingsCategory? = null
-    private var addProjectOption: AddProjectOption? = null
-    private val routes = mutableListOf<DynamicRoute>()
-
     override fun init(application: Application) {
-
-        // Register the file action
+        // 文件树里「在终端中打开」：照旧注册，但行为改成跳 Termux
         FileActionProvider.registerAction(TerminalAction)
 
-        // Register settings categories
-        settingsCategory =
-            SettingsCategory(
-                    label = strings.terminal.getString(),
-                    description = strings.terminal_desc.getString(),
-                    icon = Icon.ResourceIcon(drawables.terminal),
-                    route = SettingsRoutes.TerminalSettings.route,
-                )
-                .also { SettingsRegistry.registerCategory(it) }
-
-        if (FeatureRegistry.isEnabled("feature_terminal")) {
-            addProjectOption =
-                AddProjectOption(
-                        icon = Icon.ResourceIcon(drawables.terminal),
-                        title = strings.terminal_home.getString(),
-                        description = strings.terminal_home_desc.getString(),
-                        category = AddProjectCategory.STORAGE,
-                        onClick = { onDismiss ->
-                            if (!Settings.has_shown_terminal_dir_warning) {
-                                dialogRes(
-                                    title = strings.attention.getString(),
-                                    msg = strings.warning_private_dir.getString(),
-                                    onOk = {
-                                        Settings.has_shown_terminal_dir_warning = true
-                                        MainActivity.instance
-                                            ?.drawerViewModel
-                                            ?.addFileTreeTab(FileWrapper(sandboxHomeDir()), true)
-                                    },
-                                )
-                            } else {
-                                MainActivity.instance
-                                    ?.drawerViewModel
-                                    ?.addFileTreeTab(FileWrapper(sandboxHomeDir()), true)
-                            }
-                            onDismiss()
-                        },
-                    )
-                    .also { AddProjectRegistry.register(it) }
+        // 所有走 TerminalLauncher 的地方（运行器、终端相关命令）都改成打开 Termux
+        TerminalLauncher.handler = { activity, _, _, _, _, _, _, _ ->
+            openTermux(activity)
         }
 
-        // Register settings routes
-        routes.add(DynamicRoute(SettingsRoutes.TerminalSettings.route) { _, _ -> SettingsTerminalScreen() })
-        routes.add(DynamicRoute(SettingsRoutes.TerminalExtraKeys.route) { _, _ -> TerminalExtraKeys() })
-        routes.add(DynamicRoute(SettingsRoutes.TerminalCheck.route) { _, _ -> TerminalCheckScreen() })
-        routes.add(DynamicRoute(SettingsRoutes.TerminalFontScreen.route) { _, _ -> TerminalFontScreen() })
+        // 不再提供沙箱进程
+        SandboxedProcessRegistry.provider = null
 
-        routes.forEach { SettingsRegistry.registerRoute(it) }
-
-        // Register UniversalRunner dynamically
-        RunnerManager.addBuiltInRunner(UniversalRunner)
-
-        // Register TerminalLauncher handler
-        TerminalLauncher.handler = { activity, sandbox, exe, args, id, terminatePreviousSession, workingDir, env ->
-            pendingCommand =
-                com.rk.exec.TerminalCommand(
-                    sandbox = sandbox,
-                    exe = exe,
-                    args = args,
-                    id = id,
-                    terminatePreviousSession = terminatePreviousSession,
-                    workingDir = workingDir,
-                    env = env,
-                )
-            try {
-                val intent = Intent(activity, Terminal::class.java)
-                activity.startActivity(intent)
-            } catch (_: Exception) {
-                toast("Terminal feature is not available in this build")
-            }
-        }
-
-        // Register SandboxedProcessRegistry provider
-        SandboxedProcessRegistry.provider = { command, workingDir, excludeMounts ->
-            ubuntuProcess(excludeMounts, workingDir = workingDir, command = command)
-        }
-
-        // Register global command
+        // 注册全局「终端」命令（工具栏 / 命令面板）→ 行为是打开 Termux
         CommandProvider.registerCommand(TerminalCommand)
-
-        // Assuming there's at least one item already there
         ToolbarConfiguration.addGlobalToolbarCommand(TerminalCommand, index = 1)
-
-        // Register built-in LSP servers
-        LspRegistry.addBuiltInServers(HTML, Emmet, CSS, TypeScript, Bash, XML)
     }
 
     override fun dispose(application: Application) {
         FileActionProvider.unregisterAction(TerminalAction)
-        settingsCategory?.let { SettingsRegistry.unregisterCategory(it) }
-        addProjectOption?.let { AddProjectRegistry.unregister(it) }
-        routes.forEach { SettingsRegistry.unregisterRoute(it) }
-        routes.clear()
-
-        RunnerManager.removeBuiltInRunner(UniversalRunner)
         TerminalLauncher.handler = null
         SandboxedProcessRegistry.provider = null
         CommandProvider.unregisterCommand(TerminalCommand)
         ToolbarConfiguration.removeGlobalToolbarCommand(TerminalCommand)
-        LspRegistry.removeBuiltInServers(HTML, Emmet, CSS, TypeScript, Bash, XML)
+    }
+
+    private fun openTermux(activity: android.app.Activity) {
+        try {
+            val i = Intent()
+            i.setClassName("com.termux", "com.termux.app.TermuxActivity")
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            activity.startActivity(i)
+        } catch (t: Throwable) {
+            toast("没有找到 Termux 应用，请先安装 Termux")
+        }
     }
 }
 
@@ -172,12 +77,15 @@ object TerminalAction : FileAction() {
     override val title = strings.open_in_terminal.getString()
 
     override suspend fun execute(context: FileActionContext) {
-        val file = context.file
-        val ctx = context.context
-
-        val intent = Intent(ctx, Terminal::class.java)
-        intent.putExtra("cwd", file.getAbsolutePath())
-        ctx.startActivity(intent)
+        // PyCode 改造：跳转到 Termux
+        try {
+            val i = Intent()
+            i.setClassName("com.termux", "com.termux.app.TermuxActivity")
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.context.startActivity(i)
+        } catch (t: Throwable) {
+            toast("没有找到 Termux 应用")
+        }
     }
 
     override suspend fun isSupported(file: FileObject, root: FileObject?): Boolean {

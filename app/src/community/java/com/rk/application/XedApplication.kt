@@ -10,6 +10,8 @@ import com.rk.app.AppFlavour
 import com.rk.feature.FeatureRegistry
 import com.rk.git.GitFeature
 import com.rk.runner.RunnerFeature
+import com.rk.runner.RunnerManager
+import com.rk.runner.runners.TermuxRunner
 import java.io.File
 
 /**
@@ -33,6 +35,9 @@ class XedApplication : App() {
         // Initialize core features
         FeatureRegistry.initFeatures(this)
 
+        // PyCode 补丁：注册「在 Termux 里运行」运行器（替代自带的沙箱运行器）
+        RunnerManager.registerRunner(TermuxRunner)
+
         startCompanionBrain()
     }
 
@@ -42,8 +47,7 @@ class XedApplication : App() {
      * 双保险：
      *  1) 写触发文件 /sdcard/Download/.lsp-trigger —— Termux 里的守护脚本（lsp.sh watch）
      *     会读到它并启动大脑（不依赖任何特殊权限）
-     *  2) 再尝试 RUN_COMMAND 直接让 Termux 执行 lsp.sh start（需要危险权限
-     *     com.termux.permission.RUN_COMMAND 已被授予时才生效）
+     *  2) 再尝试 RUN_COMMAND 直接让 Termux 执行 lsp.sh start
      */
     private fun startCompanionBrain() {
         val logFile = File(getExternalFilesDir(null) ?: filesDir, "pycode-brain.log")
@@ -56,7 +60,6 @@ class XedApplication : App() {
             Log.i("PyCode", msg)
         }
 
-        // 方式一：触发文件（可靠、无需权限）
         try {
             val trig = File("/sdcard/Download/.lsp-trigger")
             trig.parentFile?.mkdirs()
@@ -66,7 +69,6 @@ class XedApplication : App() {
             log("写触发文件失败: " + t.javaClass.simpleName + " " + t.message)
         }
 
-        // 方式二：RUN_COMMAND（需要危险权限）
         try {
             val perm = try {
                 checkSelfPermission("com.termux.permission.RUN_COMMAND").toString()
