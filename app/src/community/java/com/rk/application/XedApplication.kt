@@ -74,7 +74,7 @@ class XedApplication : App() {
             )
             i.putExtra(
                 "com.termux.RUN_COMMAND_ARGUMENTS",
-                arrayOf("/data/data/com.termux/files/home/lsp.sh", "start")
+                arrayOf("/data/data/com.termux/files/home/lsp.sh", "daemon")
             )
             i.putExtra(
                 "com.termux.RUN_COMMAND_WORKDIR",
