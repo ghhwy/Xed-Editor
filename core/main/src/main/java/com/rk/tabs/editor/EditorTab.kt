@@ -290,7 +290,13 @@ open class EditorTab(
 
             val isTxtFile = file?.getName()?.endsWith(".txt") ?: (fallbackExtension == "txt")
             if (Settings.word_wrap_text && isTxtFile) {
-                setWordwrap(true, true, true)
+                // PyCode 修复：编辑器可能还没初始化完（内部 Content 仍为 null），
+                // 此时 setWordwrap -> createLayout 会抛 NullPointerException 导致应用闪退。
+                // 改设置时不再崩溃，失败只是忽略这一项。
+                runCatching { setWordwrap(true, true, true) }
+                    .onFailure {
+                        android.util.Log.e("PyCode", "setWordwrap 失败（已忽略，避免闪退）", it)
+                    }
             }
         }
     }
