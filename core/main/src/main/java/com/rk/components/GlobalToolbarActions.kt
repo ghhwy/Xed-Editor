@@ -122,7 +122,7 @@ fun GlobalToolbarActions(viewModel: MainViewModel, drawerViewModel: DrawerViewMo
                     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
                     intent.addCategory(Intent.CATEGORY_OPENABLE)
                     intent.type = "application/octet-stream"
-                    intent.putExtra(Intent.EXTRA_TITLE, "newfile.txt")
+                    intent.putExtra(Intent.EXTRA_TITLE, "newfile.py")
 
                     val activities =
                         application!!.packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
@@ -141,7 +141,7 @@ fun GlobalToolbarActions(viewModel: MainViewModel, drawerViewModel: DrawerViewMo
                     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
                     intent.addCategory(Intent.CATEGORY_OPENABLE)
                     intent.type = "application/octet-stream"
-                    intent.putExtra(Intent.EXTRA_TITLE, "newfile.txt")
+                    intent.putExtra(Intent.EXTRA_TITLE, "newfile.py")
 
                     val activities =
                         application!!.packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
@@ -149,7 +149,7 @@ fun GlobalToolbarActions(viewModel: MainViewModel, drawerViewModel: DrawerViewMo
                         errorDialog(strings.unsupported_feature)
                     } else {
                         MainActivity.instance?.apply {
-                            fileManager.createNewFile(mimeType = "*/*", title = "newfile.txt") {
+                            fileManager.createNewFile(mimeType = "*/*", title = "newfile.py") {
                                 if (it != null) {
                                     lifecycleScope.launch {
                                         viewModel.editorManager.openFile(

@@ -144,7 +144,18 @@ class FileWrapper(var file: File) : FileObject {
     override suspend fun renameTo(string: String): Boolean =
         withContext(Dispatchers.IO) {
             val newFile = File(file.parentFile, string)
-            return@withContext file.renameTo(newFile).also { this@FileWrapper.file = newFile }
+            // PyCode 修复：只有真正成功才更新内部路径；失败时退回「复制+删除」
+            val ok = file.renameTo(newFile) || try {
+                if (newFile.exists()) newFile.delete()
+                file.copyTo(newFile, overwrite = true)
+                file.delete()
+            } catch (e: Throwable) {
+                false
+            }
+            if (ok) {
+                this@FileWrapper.file = newFile
+            }
+            return@withContext ok
         }
 
     override suspend fun hasChild(name: String): Boolean =
