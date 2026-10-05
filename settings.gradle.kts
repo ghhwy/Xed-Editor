@@ -26,7 +26,7 @@ dependencyResolutionManagement {
 
 include(":app", ":core:main", ":core:components", ":core:resources")
 
-include(":features:terminal", ":features:extensions", ":features:runner", ":features:git")
+include(":features:extensions", ":features:runner", ":features:git")
 
 include(":baselineprofile", ":benchmark", ":benchmark2")
 
@@ -34,11 +34,7 @@ include(":baselineprofile", ":benchmark", ":benchmark2")
 // (16 KB page size aligned) instead of the prebuilt JitPack AARs, whose
 // libtermux.so was only 4 KB (0x1000) aligned and failed the Android 15+
 // 16 KB page size requirement.
-include(":terminal-emulator", ":terminal-view")
 
-include(":features:terminal:proot")
-include(":features:terminal:link2symlink")
-include(":features:terminal:xed-cli")
 
 
 if (!file("soraX/settings.gradle.kts").exists()) {

@@ -40,7 +40,6 @@ dependencies {
     implementation(project(":core:components"))
     implementation(project(":core:resources"))
 
-    implementation(project(":features:terminal"))
 
     implementation(libs.kotlinx.coroutines)
 

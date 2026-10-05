@@ -4,11 +4,13 @@ import android.content.Intent
 import android.util.Log
 import com.rk.App
 import com.rk.ExtensionFeature
-import com.rk.TerminalFeature
 import com.rk.ai.AiFeature
 import com.rk.app.AppFlavour
+import com.rk.commands.CommandProvider
+import com.rk.commands.ToolbarConfiguration
 import com.rk.feature.FeatureRegistry
 import com.rk.git.GitFeature
+import com.rk.pycode.TermuxTerminalCommand
 import com.rk.runner.RunnerFeature
 import com.rk.runner.RunnerManager
 import com.rk.runner.runners.TermuxRunner
@@ -17,38 +19,31 @@ import java.io.File
 /**
  * Application entry point for the `community` distribution.
  *
- * Registers every feature, including `ExtensionFeature` provided by the bundled
- * `:features:extensions` module.
+ * PyCode 改造：不再注册 TerminalFeature（自带终端/沙箱已整体移除），
+ * 改为注册「终端 → Termux」命令 + 「在 Termux 里运行」运行器。
  */
 class XedApplication : App() {
     override fun onCreate() {
-        // Publish the compile-time flavour (see app/build.gradle.kts) before any shared code runs.
         AppFlavour.init(BuildConfig.FLAVOUR)
 
         super.onCreate()
-        // Register pluggable features
-        FeatureRegistry.register(TerminalFeature())
         FeatureRegistry.register(ExtensionFeature())
         FeatureRegistry.register(RunnerFeature())
         FeatureRegistry.register(GitFeature())
         FeatureRegistry.register(AiFeature())
-        // Initialize core features
         FeatureRegistry.initFeatures(this)
 
-        // PyCode 补丁：注册「在 Termux 里运行」运行器（替代自带的沙箱运行器）
+        // 「终端」入口 → Termux
+        CommandProvider.registerCommand(TermuxTerminalCommand)
+        ToolbarConfiguration.addGlobalToolbarCommand(TermuxTerminalCommand, index = 1)
+
+        // 运行按钮 → Termux
         RunnerManager.registerRunner(TermuxRunner)
 
         startCompanionBrain()
     }
 
-    /**
-     * PyCode 补丁：让 Termux 里的 Python 补全服务器（pylsp:8767）保持在线。
-     *
-     * 双保险：
-     *  1) 写触发文件 /sdcard/Download/.lsp-trigger —— Termux 里的守护脚本（lsp.sh watch）
-     *     会读到它并启动大脑（不依赖任何特殊权限）
-     *  2) 再尝试 RUN_COMMAND 直接让 Termux 执行 lsp.sh start
-     */
+    /** PyCode 补丁：让 Termux 里的 pylsp（补全大脑）保持在线 */
     private fun startCompanionBrain() {
         val logFile = File(getExternalFilesDir(null) ?: filesDir, "pycode-brain.log")
 
@@ -70,32 +65,24 @@ class XedApplication : App() {
         }
 
         try {
-            val perm = try {
-                checkSelfPermission("com.termux.permission.RUN_COMMAND").toString()
-            } catch (t: Throwable) {
-                "查询失败"
-            }
-            log("RUN_COMMAND权限(code)=" + perm)
-
-            val intent = Intent()
-            intent.setClassName("com.termux", "com.termux.app.RunCommandService")
-            intent.action = "com.termux.RUN_COMMAND"
-            intent.putExtra(
+            val i = Intent()
+            i.setClassName("com.termux", "com.termux.app.RunCommandService")
+            i.action = "com.termux.RUN_COMMAND"
+            i.putExtra(
                 "com.termux.RUN_COMMAND_PATH",
                 "/data/data/com.termux/files/usr/bin/sh"
             )
-            intent.putExtra(
+            i.putExtra(
                 "com.termux.RUN_COMMAND_ARGUMENTS",
                 arrayOf("/data/data/com.termux/files/home/lsp.sh", "start")
             )
-            intent.putExtra(
+            i.putExtra(
                 "com.termux.RUN_COMMAND_WORKDIR",
                 "/data/data/com.termux/files/home"
             )
-            intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
-
+            i.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
             try {
-                startForegroundService(intent)
+                startForegroundService(i)
                 log("RUN_COMMAND 已发送")
             } catch (t: Throwable) {
                 log("RUN_COMMAND 发送失败: " + t.javaClass.simpleName + " " + t.message)

@@ -147,7 +147,6 @@ dependencies {
     implementation(project(":core:main"))
     implementation(project(":core:resources"))
     implementation(libs.androidx.appcompat)
-    implementation(project(":features:terminal"))
     implementation(project(":features:runner"))
     implementation(project(":features:git"))
     implementation(project(":features:ai"))
