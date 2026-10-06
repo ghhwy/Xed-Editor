@@ -358,10 +358,9 @@ class PyCodeTerminalActivity : AppCompatActivity() {
 
     /** 输入法此刻是否真的显示着（不能只看 imm.isActive —— 键盘收起时它也可能返回 true）。 */
     private fun isImeVisible(): Boolean = try {
-        val insets = ViewCompat.getRootWindowInsets(terminalView)
-        insets != null &&
-            WindowInsetsCompat.toWindowInsetsCompat(insets)
-                .isVisible(WindowInsetsCompat.Type.ime())
+        // 注意：getRootWindowInsets() 返回的已经是 WindowInsetsCompat，不要再套 toWindowInsetsCompat()
+        ViewCompat.getRootWindowInsets(terminalView)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) ?: false
     } catch (t: Throwable) {
         false
     }
