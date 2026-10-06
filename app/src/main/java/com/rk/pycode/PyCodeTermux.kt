@@ -3,6 +3,7 @@ package com.rk.pycode
 import android.content.Intent
 import android.view.KeyEvent
 import com.rk.commands.ActionContext
+import com.rk.commands.EditorActionContext
 import com.rk.commands.GlobalCommand
 import com.rk.commands.KeyCombination
 import com.rk.icons.Icon
@@ -20,10 +21,17 @@ object TermuxTerminalCommand : GlobalCommand() {
     override fun execute(context: ActionContext) {
         // PyCode 补丁：打开**内置终端**（全屏 Activity）——它连的是 Termux 里的「终端桥」，
         // 所以界面在 PyCode 里、环境却是真 Termux；不再跳 Termux 应用。
+        // 如果是从编辑器里触发的，把当前文件也带过去（终端的 ▶ 按钮就能直接跑它）。
         try {
             val i = Intent()
             i.setClassName(context.currentActivity, "com.rk.pycode.terminal.PyCodeTerminalActivity")
-            i.putExtra("cwd", "/sdcard/PythonProjects/code")
+            var cwd = "/sdcard/PythonProjects/code"
+            val file = (context as? EditorActionContext)?.editorTab?.file?.getAbsolutePath()
+            if (file != null) {
+                i.putExtra("file", file)
+                java.io.File(file).parent?.let { cwd = it }
+            }
+            i.putExtra("cwd", cwd)
             context.currentActivity.startActivity(i)
         } catch (t: Throwable) {
             // 兜底：内置终端起不来就直接开 Termux

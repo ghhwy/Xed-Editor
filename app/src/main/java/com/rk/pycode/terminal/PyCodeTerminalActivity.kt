@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.TextUtils
 import android.util.Log
@@ -20,6 +22,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
+import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.concurrent.thread
@@ -50,10 +53,20 @@ class PyCodeTerminalActivity : AppCompatActivity() {
 
         const val EXTRA_CMD = "cmd"
         const val EXTRA_CWD = "cwd"
+
+        /** 要运行的脚本（绝对路径）；不传则运行 code/ 里最新的 .py */
+        const val EXTRA_FILE = "file"
+
+        /**
+         * 「运行结束」标记文件：注入的命令末尾会写 `echo $? > 这个文件`，
+         * App 轮询它的修改时间来判断脚本跑完了没有（不需要改协议）。
+         */
+        private const val RC_FILE = "/sdcard/PythonProjects/_engine/_last_rc"
     }
 
     private lateinit var terminalView: TerminalView
     private lateinit var statusText: TextView
+    private lateinit var runButton: TextView
     private lateinit var ctrlButton: TextView
     private lateinit var altButton: TextView
     private lateinit var client: PyCodeTerminalClient
@@ -69,6 +82,35 @@ class PyCodeTerminalActivity : AppCompatActivity() {
 
     /** 当前字号（dp）——TerminalRenderer.mTextSize 是包内可见，读不了，所以自己记一份。 */
     private var currentFontSize = BASE_FONT_SIZE.toInt()
+
+    /** 当前是否"正在跑脚本"：决定按钮显示 ▶ 还是 ■。 */
+    private var running = false
+
+    /** 要运行哪个脚本（绝对路径）；null = 运行 code/ 里最新的 .py。 */
+    private var runTarget: String? = null
+
+    /** 初始工作目录（也是没指定文件时 r.sh 的工作区）。 */
+    private var workDir: String = "/sdcard/PythonProjects/code"
+
+    private val rcHandler = Handler(Looper.getMainLooper())
+    private var rcWatchStart = 0L
+    private val rcPoll = object : Runnable {
+        override fun run() {
+            if (!running) return
+            val f = File(RC_FILE)
+            if (f.exists() && f.lastModified() >= rcWatchStart) {
+                val rc = try {
+                    f.readText().trim()
+                } catch (t: Throwable) {
+                    "?"
+                }
+                setRunning(false)
+                statusText.text = "运行结束（退出码 $rc）"
+                return
+            }
+            rcHandler.postDelayed(this, 600)
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
@@ -88,6 +130,9 @@ class PyCodeTerminalActivity : AppCompatActivity() {
             setBackgroundColor(0xFF1B1B1B.toInt())
             setPadding(dp(6), 0, dp(6), 0)
         }
+        runButton = smallButton("▶") { toggleRun() }
+        runButton.setTextColor(0xFF9BE37F.toInt())
+        bar.addView(runButton)
         bar.addView(smallButton("✕") { finish() })
         statusText = TextView(this).apply {
             text = "正在连接终端桥…"
@@ -137,6 +182,8 @@ class PyCodeTerminalActivity : AppCompatActivity() {
 
         val cmd = intent?.getStringExtra(EXTRA_CMD) ?: "bash -l"
         val cwd = intent?.getStringExtra(EXTRA_CWD) ?: "/sdcard/PythonProjects/code"
+        workDir = cwd
+        runTarget = intent?.getStringExtra(EXTRA_FILE)
         ensureBridgeThenStart(cmd, cwd)
     }
 
@@ -209,6 +256,62 @@ class PyCodeTerminalActivity : AppCompatActivity() {
         terminalView.requestFocus()
         statusText.text = cwd
         showKeyboard()
+
+        // 从编辑器「▶ 运行」进来时会带 file：等 shell 起来后自动跑一次
+        if (runTarget != null) {
+            terminalView.postDelayed({ doRun() }, 900)
+        }
+    }
+
+    // ------------------------------------------------------------------ 运行 / 中断
+
+    /** 一个按钮切两态：▶ 运行 / ■ 中断。 */
+    private fun toggleRun() {
+        if (running) doInterrupt() else doRun()
+    }
+
+    private fun setRunning(value: Boolean) {
+        running = value
+        runButton.text = if (value) "■" else "▶"
+        runButton.setTextColor(
+            if (value) 0xFFFF8A65.toInt() else 0xFF9BE37F.toInt()
+        )
+    }
+
+    /** 单引号包住路径（处理路径里的空格/中文）。 */
+    private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+
+    /** 运行：把命令写进终端（跟用户手打一样），末尾写一个退出码标记供轮询。 */
+    private fun doRun() {
+        val s = session ?: return
+        val target = runTarget
+        val cmd = if (target != null) {
+            val dir = File(target).parent ?: workDir
+            "cd " + shellQuote(dir) + " && python " + shellQuote(target)
+        } else {
+            "cd " + shellQuote(workDir) + " && sh ~/r.sh"
+        } + " ; echo $? > " + RC_FILE
+
+        try {
+            File(RC_FILE).delete()
+        } catch (t: Throwable) {
+        }
+        rcWatchStart = System.currentTimeMillis()
+        val bytes = (cmd + "\r").toByteArray()
+        s.write(bytes, 0, bytes.size)
+        setRunning(true)
+        statusText.text = if (target != null) "运行中：" + File(target).name else "运行中：最新脚本"
+        rcHandler.removeCallbacks(rcPoll)
+        rcHandler.postDelayed(rcPoll, 900)
+    }
+
+    /** 中断：Ctrl+C（跟终端里按 Ctrl+C 一样）。 */
+    private fun doInterrupt() {
+        val s = session ?: return
+        s.write(byteArrayOf(3), 0, 1)
+        rcHandler.removeCallbacks(rcPoll)
+        setRunning(false)
+        statusText.text = "已中断"
     }
 
     private fun escapeJson(s: String): String =
@@ -375,6 +478,10 @@ class PyCodeTerminalActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        try {
+            rcHandler.removeCallbacks(rcPoll)
+        } catch (t: Throwable) {
+        }
         // 关闭界面 = 结束远端 shell（桥会把对应 pty 收掉）
         try {
             session?.finishIfRunning()
