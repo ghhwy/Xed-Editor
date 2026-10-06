@@ -20,8 +20,6 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import java.io.File
@@ -181,6 +179,8 @@ class PyCodeTerminalActivity : AppCompatActivity() {
         root.fitsSystemWindows = true
         window.statusBarColor = 0xFF1B1B1B.toInt()
         window.navigationBarColor = 0xFF141414.toInt()
+
+        installImeWatcher(root)
 
         val cmd = intent?.getStringExtra(EXTRA_CMD) ?: "bash -l"
         val cwd = intent?.getStringExtra(EXTRA_CWD) ?: "/sdcard/PythonProjects/code"
@@ -351,18 +351,31 @@ class PyCodeTerminalActivity : AppCompatActivity() {
         return clamped
     }
 
-    fun showKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        terminalView.postDelayed({ imm.showSoftInput(terminalView, 0) }, 200)
+    /**
+     * 键盘是不是显示着。
+     * <p>不用 WindowInsets 判断 —— 本界面根布局设了 fitsSystemWindows，insets 会被吃掉、判断不准；
+     * 这里用经典做法：**窗口可见区域比整屏矮 1/4 以上**就认为键盘弹出来了。
+     */
+    private var imeShown = false
+
+    private fun installImeWatcher(root: View) {
+        root.viewTreeObserver.addOnGlobalLayoutListener {
+            try {
+                val rect = android.graphics.Rect()
+                root.getWindowVisibleDisplayFrame(rect)
+                val screenH = root.rootView.height
+                imeShown = screenH > 0 && (screenH - rect.height()) > screenH / 4
+            } catch (t: Throwable) {
+                // 忽略
+            }
+        }
     }
 
-    /** 输入法此刻是否真的显示着（不能只看 imm.isActive —— 键盘收起时它也可能返回 true）。 */
-    private fun isImeVisible(): Boolean = try {
-        // 注意：getRootWindowInsets() 返回的已经是 WindowInsetsCompat，不要再套 toWindowInsetsCompat()
-        ViewCompat.getRootWindowInsets(terminalView)
-            ?.isVisible(WindowInsetsCompat.Type.ime()) ?: false
-    } catch (t: Throwable) {
-        false
+    /** 显示输入法（点终端区域时调用）。 */
+    fun showKeyboard() {
+        imeShown = true
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        terminalView.postDelayed({ imm.showSoftInput(terminalView, 0) }, 200)
     }
 
     /** 显示/收起输入法（顶栏 ⌨ 按钮）。 */
@@ -370,9 +383,11 @@ class PyCodeTerminalActivity : AppCompatActivity() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         terminalView.postDelayed(
             {
-                if (isImeVisible()) {
+                if (imeShown) {
+                    imeShown = false
                     imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
                 } else {
+                    imeShown = true
                     imm.showSoftInput(terminalView, 0)
                 }
             },
