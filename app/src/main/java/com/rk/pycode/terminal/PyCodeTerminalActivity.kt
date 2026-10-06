@@ -101,12 +101,12 @@ class PyCodeTerminalActivity : AppCompatActivity() {
             statusText,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        bar.addView(smallButton("⌨") { showKeyboard() })
+        bar.addView(smallButton("⌨") { toggleKeyboard() })
         bar.addView(smallButton("A-") { changeFontSize(-2) })
         bar.addView(smallButton("A+") { changeFontSize(+2) })
         root.addView(
             bar,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40))
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
         )
 
         // ---------------- 终端本体 ----------------
@@ -130,8 +130,13 @@ class PyCodeTerminalActivity : AppCompatActivity() {
 
         setContentView(root)
 
+        // 顶栏要避开系统状态栏：否则顶栏那几个按钮会被状态栏的触摸区域吃掉，点不动
+        root.fitsSystemWindows = true
+        window.statusBarColor = 0xFF1B1B1B.toInt()
+        window.navigationBarColor = 0xFF141414.toInt()
+
         val cmd = intent?.getStringExtra(EXTRA_CMD) ?: "bash -l"
-        val cwd = intent?.getStringExtra(EXTRA_CWD) ?: "/sdcard/PythonProjects"
+        val cwd = intent?.getStringExtra(EXTRA_CWD) ?: "/sdcard/PythonProjects/code"
         ensureBridgeThenStart(cmd, cwd)
     }
 
@@ -241,6 +246,21 @@ class PyCodeTerminalActivity : AppCompatActivity() {
         terminalView.postDelayed({ imm.showSoftInput(terminalView, 0) }, 200)
     }
 
+    /** 显示/收起输入法（顶栏 ⌨ 按钮）。 */
+    fun toggleKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        terminalView.postDelayed(
+            {
+                if (imm.isActive(terminalView)) {
+                    imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+                } else {
+                    imm.showSoftInput(terminalView, 0)
+                }
+            },
+            150
+        )
+    }
+
     fun copyToClipboard(text: String) {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("terminal", text))
@@ -260,6 +280,7 @@ class PyCodeTerminalActivity : AppCompatActivity() {
     private fun changeFontSize(delta: Int) {
         currentFontSize = (currentFontSize + delta).coerceIn(8, 40)
         terminalView.setTextSize(currentFontSize)
+        statusText.text = "字号 $currentFontSize"
     }
 
     private fun buildExtraKeys(): View {

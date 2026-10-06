@@ -23,7 +23,7 @@ object TermuxTerminalCommand : GlobalCommand() {
         try {
             val i = Intent()
             i.setClassName(context.currentActivity, "com.rk.pycode.terminal.PyCodeTerminalActivity")
-            i.putExtra("cwd", "/sdcard/PythonProjects")
+            i.putExtra("cwd", "/sdcard/PythonProjects/code")
             context.currentActivity.startActivity(i)
         } catch (t: Throwable) {
             // 兜底：内置终端起不来就直接开 Termux
