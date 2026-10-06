@@ -20,6 +20,8 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import java.io.File
@@ -354,18 +356,28 @@ class PyCodeTerminalActivity : AppCompatActivity() {
         terminalView.postDelayed({ imm.showSoftInput(terminalView, 0) }, 200)
     }
 
+    /** 输入法此刻是否真的显示着（不能只看 imm.isActive —— 键盘收起时它也可能返回 true）。 */
+    private fun isImeVisible(): Boolean = try {
+        val insets = ViewCompat.getRootWindowInsets(terminalView)
+        insets != null &&
+            WindowInsetsCompat.toWindowInsetsCompat(insets)
+                .isVisible(WindowInsetsCompat.Type.ime())
+    } catch (t: Throwable) {
+        false
+    }
+
     /** 显示/收起输入法（顶栏 ⌨ 按钮）。 */
     fun toggleKeyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         terminalView.postDelayed(
             {
-                if (imm.isActive(terminalView)) {
+                if (isImeVisible()) {
                     imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
                 } else {
                     imm.showSoftInput(terminalView, 0)
                 }
             },
-            150
+            120
         )
     }
 
