@@ -241,6 +241,32 @@ public final class TerminalSession extends TerminalOutput {
         }.start();
     }
 
+    /**
+     * 让桥把「当前前台进程组」杀掉（SIGINT 不行就 SIGKILL）。
+     * <p>用于「■ 中断」：比单纯发 Ctrl+C 可靠 —— 有些程序/终端状态下 ^C 只被回显、不产生 SIGINT。
+     */
+    public void killForeground() {
+        final OutputStream out = mSocketOut;
+        if (out == null) {
+            Logger.logWarn(mClient, LOG_TAG, "kill 丢弃：socket 还没连上");
+            return;
+        }
+        mControlExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    synchronized (mSocketLock) {
+                        out.write("{\"t\":\"k\"}\n".getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                    }
+                    Logger.logInfo(mClient, LOG_TAG, "已请求桥杀掉前台进程组");
+                } catch (Exception e) {
+                    Logger.logStackTraceWithMessage(mClient, LOG_TAG, "kill 发送失败", e);
+                }
+            }
+        });
+    }
+
     private void sendResizeJson(final int rows, final int cols, final int cw, final int ch) {
         final OutputStream out = mSocketOut;
         if (out == null) {

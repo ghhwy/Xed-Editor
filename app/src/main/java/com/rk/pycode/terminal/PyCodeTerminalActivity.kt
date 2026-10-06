@@ -308,7 +308,10 @@ class PyCodeTerminalActivity : AppCompatActivity() {
     /** 中断：Ctrl+C（跟终端里按 Ctrl+C 一样）。 */
     private fun doInterrupt() {
         val s = session ?: return
+        // 先照常发一个 Ctrl+C（大多数程序吃这个）
         s.write(byteArrayOf(3), 0, 1)
+        // 再由桥兜底：直接杀掉当前前台进程组（有些程序/状态下 ^C 不产生 SIGINT）
+        s.killForeground()
         rcHandler.removeCallbacks(rcPoll)
         setRunning(false)
         statusText.text = "已中断"
