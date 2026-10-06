@@ -46,7 +46,7 @@ class PyCodeTerminalActivity : AppCompatActivity() {
 
         /** 桥的启动脚本（sdcard 上那份，优先它，保证同步前也能用）。 */
         private const val BRIDGE_SCRIPT = "/sdcard/PythonProjects/_engine/tty.sh"
-        private const val BASE_FONT_SIZE = 16f
+        private const val BASE_FONT_SIZE = 32f
 
         const val EXTRA_CMD = "cmd"
         const val EXTRA_CWD = "cwd"
@@ -234,9 +234,9 @@ class PyCodeTerminalActivity : AppCompatActivity() {
     }
 
     fun onScale(scale: Float): Float {
-        val clamped = scale.coerceIn(0.5f, 2.5f)
+        val clamped = scale.coerceIn(0.35f, 2.5f)
         scaleFactor = clamped
-        currentFontSize = (BASE_FONT_SIZE * clamped).toInt().coerceIn(8, 40)
+        currentFontSize = (BASE_FONT_SIZE * clamped).toInt().coerceIn(12, 72)
         terminalView.post { terminalView.setTextSize(currentFontSize) }
         return clamped
     }
@@ -278,7 +278,7 @@ class PyCodeTerminalActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ UI 小工具
 
     private fun changeFontSize(delta: Int) {
-        currentFontSize = (currentFontSize + delta).coerceIn(8, 40)
+        currentFontSize = (currentFontSize + delta).coerceIn(12, 72)
         terminalView.setTextSize(currentFontSize)
         statusText.text = "字号 $currentFontSize"
     }

@@ -95,6 +95,8 @@ public final class TerminalSession extends TerminalOutput {
 
     /** 尺寸变化：首次调用会建立会话，之后只通知桥调整远端 pty 大小。 */
     public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
+        Logger.logInfo(mClient, LOG_TAG, "updateSize: cols=" + columns + " rows=" + rows
+            + " emulator=" + (mEmulator != null));
         if (mEmulator == null) {
             initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels);
         } else {
@@ -144,8 +146,10 @@ public final class TerminalSession extends TerminalOutput {
                         .append(",\"ch\":").append(fCh)
                         .append("}\n");
                     OutputStream out = mSocketOut;
-                    out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-                    out.flush();
+                    synchronized (mSocketLock) {
+                        out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                    }
 
                     startReader(s);
                     startWriter();
@@ -203,8 +207,10 @@ public final class TerminalSession extends TerminalOutput {
                     try {
                         String line = "{\"t\":\"i\",\"d\":\""
                             + Base64.getEncoder().encodeToString(Arrays.copyOf(buffer, n)) + "\"}\n";
-                        out.write(line.getBytes(StandardCharsets.UTF_8));
-                        out.flush();
+                        synchronized (mSocketLock) {
+                            out.write(line.getBytes(StandardCharsets.UTF_8));
+                            out.flush();
+                        }
                     } catch (Exception e) {
                         return;
                     }
@@ -215,14 +221,20 @@ public final class TerminalSession extends TerminalOutput {
 
     private void sendResizeJson(int rows, int cols, int cw, int ch) {
         OutputStream out = mSocketOut;
-        if (out == null) return;
+        if (out == null) {
+            Logger.logWarn(mClient, LOG_TAG, "resize 丢弃：socket 还没连上");
+            return;
+        }
         try {
             String line = "{\"t\":\"s\",\"rows\":" + rows + ",\"cols\":" + cols
                 + ",\"cw\":" + cw + ",\"ch\":" + ch + "}\n";
-            out.write(line.getBytes(StandardCharsets.UTF_8));
-            out.flush();
-        } catch (Exception ignored) {
-            // 会话可能已结束
+            synchronized (mSocketLock) {
+                out.write(line.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+            Logger.logInfo(mClient, LOG_TAG, "resize 已发送: " + rows + "x" + cols);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(mClient, LOG_TAG, "resize 发送失败", e);
         }
     }
 
