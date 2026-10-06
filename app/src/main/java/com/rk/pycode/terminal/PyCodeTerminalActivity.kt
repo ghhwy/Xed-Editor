@@ -255,7 +255,7 @@ class PyCodeTerminalActivity : AppCompatActivity() {
         terminalView.attachSession(s)
         terminalView.requestFocus()
         statusText.text = cwd
-        showKeyboard()
+        // 注意：这里**不要**自动弹键盘 —— 从编辑器 ▶ 进来时用户多半是在看输出
 
         // 从编辑器「▶ 运行」进来时会带 file：等 shell 起来后自动跑一次
         if (runTarget != null) {
@@ -335,8 +335,10 @@ class PyCodeTerminalActivity : AppCompatActivity() {
     }
 
     fun onEmulatorSet() {
-        // 模拟器就绪后再收一次键盘，确保能输入
-        showKeyboard()
+        // ⚠️ 这里**绝不能**自动弹键盘！
+        // 收起键盘 → 视图尺寸变化 → TerminalView.updateSize() → onEmulatorSet() → 再弹 →
+        // 用户就会看到"收起后一秒又弹出来"的死循环。
+        // 需要键盘时，用户点一下终端区域或点顶栏 ⌨ 即可（见 onSingleTapUp / toggleKeyboard）。
     }
 
     fun onScale(scale: Float): Float {
