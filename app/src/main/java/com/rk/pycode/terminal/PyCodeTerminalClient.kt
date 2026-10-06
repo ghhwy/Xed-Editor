@@ -103,18 +103,33 @@ class PyCodeTerminalClient(private val activity: PyCodeTerminalActivity) :
 
     // ------------------------------------------------------------------ 日志
 
-    override fun logError(tag: String, message: String) = Log.e(tag, message)
+    // 注意：接口要求 Unit，这里必须用块体（`= Log.e(...)` 会返回 Int 导致编译失败）
 
-    override fun logWarn(tag: String, message: String) = Log.w(tag, message)
+    override fun logError(tag: String, message: String) {
+        Log.e(tag, message)
+    }
 
-    override fun logInfo(tag: String, message: String) = Log.i(tag, message)
+    override fun logWarn(tag: String, message: String) {
+        Log.w(tag, message)
+    }
 
-    override fun logDebug(tag: String, message: String) = Log.d(tag, message)
+    override fun logInfo(tag: String, message: String) {
+        Log.i(tag, message)
+    }
 
-    override fun logVerbose(tag: String, message: String) = Log.v(tag, message)
+    override fun logDebug(tag: String, message: String) {
+        Log.d(tag, message)
+    }
 
-    override fun logStackTraceWithMessage(tag: String, message: String, e: Exception) =
+    override fun logVerbose(tag: String, message: String) {
+        Log.v(tag, message)
+    }
+
+    override fun logStackTraceWithMessage(tag: String, message: String, e: Exception) {
         Log.e(tag, message, e)
+    }
 
-    override fun logStackTrace(tag: String, e: Exception) = Log.e(tag, "stacktrace", e)
+    override fun logStackTrace(tag: String, e: Exception) {
+        Log.e(tag, "stacktrace", e)
+    }
 }
