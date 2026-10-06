@@ -12,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * PyCode 版 TerminalSession：**只走 socket**（连到 Termux 里的「终端桥」127.0.0.1:8768）。
@@ -65,6 +67,16 @@ public final class TerminalSession extends TerminalOutput {
     private final Integer mTranscriptRows;
 
     private final Object mSocketLock = new Object();
+    /**
+     * 控制类消息（open / resize / end）的写线程。
+     * <p>Android 不允许在主线程做 socket 写，而「改字号 → updateSize → resize」正好发生在主线程，
+     * 所以这些消息必须丢到这个后台单线程里写（FIFO，保证 open 先于 resize）。
+     */
+    private final ExecutorService mControlExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "TermSessionControl");
+        t.setDaemon(true); // 别让它拖住进程
+        return t;
+    });
     private volatile Socket mSocket;
     private volatile OutputStream mSocketOut;
     private volatile boolean mClosedByUser;
@@ -145,11 +157,21 @@ public final class TerminalSession extends TerminalOutput {
                         .append(",\"cw\":").append(fCw)
                         .append(",\"ch\":").append(fCh)
                         .append("}\n");
-                    OutputStream out = mSocketOut;
-                    synchronized (mSocketLock) {
-                        out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-                        out.flush();
-                    }
+                    final OutputStream out = mSocketOut;
+                    final String openLine = sb.toString();
+                    mControlExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                synchronized (mSocketLock) {
+                                    out.write(openLine.getBytes(StandardCharsets.UTF_8));
+                                    out.flush();
+                                }
+                            } catch (Exception e) {
+                                Logger.logStackTraceWithMessage(mClient, LOG_TAG, "open 发送失败", e);
+                            }
+                        }
+                    });
 
                     startReader(s);
                     startWriter();
@@ -219,23 +241,30 @@ public final class TerminalSession extends TerminalOutput {
         }.start();
     }
 
-    private void sendResizeJson(int rows, int cols, int cw, int ch) {
-        OutputStream out = mSocketOut;
+    private void sendResizeJson(final int rows, final int cols, final int cw, final int ch) {
+        final OutputStream out = mSocketOut;
         if (out == null) {
             Logger.logWarn(mClient, LOG_TAG, "resize 丢弃：socket 还没连上");
             return;
         }
-        try {
-            String line = "{\"t\":\"s\",\"rows\":" + rows + ",\"cols\":" + cols
-                + ",\"cw\":" + cw + ",\"ch\":" + ch + "}\n";
-            synchronized (mSocketLock) {
-                out.write(line.getBytes(StandardCharsets.UTF_8));
-                out.flush();
+        // 注意：这里通常是在主线程被调用的，绝不能直接写 socket（NetworkOnMainThreadException），
+        // 必须交给后台线程。
+        mControlExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final String line = "{\"t\":\"s\",\"rows\":" + rows + ",\"cols\":" + cols
+                        + ",\"cw\":" + cw + ",\"ch\":" + ch + "}\n";
+                    synchronized (mSocketLock) {
+                        out.write(line.getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                    }
+                    Logger.logInfo(mClient, LOG_TAG, "resize 已发送: " + rows + "x" + cols);
+                } catch (Exception e) {
+                    Logger.logStackTraceWithMessage(mClient, LOG_TAG, "resize 发送失败", e);
+                }
             }
-            Logger.logInfo(mClient, LOG_TAG, "resize 已发送: " + rows + "x" + cols);
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(mClient, LOG_TAG, "resize 发送失败", e);
-        }
+        });
     }
 
     /** 写数据到会话（TerminalView / 键盘 / 扩展键都走这里）。 */
@@ -289,14 +318,26 @@ public final class TerminalSession extends TerminalOutput {
     public void finishIfRunning() {
         if (!isRunning()) return;
         mClosedByUser = true;
-        OutputStream out = mSocketOut;
-        try {
-            if (out != null) {
-                out.write("{\"t\":\"e\"}\n".getBytes(StandardCharsets.UTF_8));
-                out.flush();
+        final OutputStream out = mSocketOut;
+        if (out != null) {
+            try {
+                mControlExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            // 桥在连接断开时本来就会收掉子进程；这里只是尽量先打个招呼
+                            synchronized (mSocketLock) {
+                                out.write("{\"t\":\"e\"}\n".getBytes(StandardCharsets.UTF_8));
+                                out.flush();
+                            }
+                        } catch (Exception ignored) {
+                            // 已经断了
+                        }
+                    }
+                });
+                Thread.sleep(120); // 给它一点时间把 'e' 发出去
+            } catch (Exception ignored) {
             }
-        } catch (Exception ignored) {
-            // 已经断了
         }
         closeSocket();
     }
@@ -309,6 +350,10 @@ public final class TerminalSession extends TerminalOutput {
         mTerminalToProcessIOQueue.close();
         mProcessToTerminalIOQueue.close();
         closeSocket();
+        try {
+            mControlExecutor.shutdownNow();
+        } catch (Exception ignored) {
+        }
     }
 
     private void closeSocket() {
