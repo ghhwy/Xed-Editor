@@ -25,6 +25,8 @@ dependencyResolutionManagement {
 }
 
 include(":app", ":core:main", ":core:components", ":core:resources")
+// PyCode 补丁：内置终端模块（Termux 终端界面 + 我们改写的 socket 会话层，不需要 NDK）
+include(":core:terminal")
 
 include(":features:extensions", ":features:runner", ":features:git")
 

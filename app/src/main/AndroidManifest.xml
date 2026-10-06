@@ -48,6 +48,15 @@
             android:shell="true"
             tools:targetApi="29" />
 
+        <!-- PyCode 补丁：内置终端（全屏 Activity，连 Termux 里的终端桥；无原生库） -->
+        <activity
+            android:name="com.rk.pycode.terminal.PyCodeTerminalActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|density|uiMode"
+            android:exported="true"
+            android:label="终端"
+            android:theme="@style/Theme.Karbon"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name="com.rk.activities.main.MainActivity"
             android:alwaysRetainTaskState="true"

@@ -146,6 +146,8 @@ dependencies {
     baselineProfile(project(":baselineprofile"))
     implementation(project(":core:main"))
     implementation(project(":core:resources"))
+    // PyCode 补丁：内置终端（Termux 终端界面 + socket 会话层）
+    implementation(project(":core:terminal"))
     implementation(libs.androidx.appcompat)
     implementation(project(":features:runner"))
     implementation(project(":features:git"))

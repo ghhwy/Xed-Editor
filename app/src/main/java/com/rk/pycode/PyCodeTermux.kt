@@ -18,12 +18,22 @@ object TermuxTerminalCommand : GlobalCommand() {
     override fun getLabel(): String = "终端"
 
     override fun execute(context: ActionContext) {
+        // PyCode 补丁：打开**内置终端**（全屏 Activity）——它连的是 Termux 里的「终端桥」，
+        // 所以界面在 PyCode 里、环境却是真 Termux；不再跳 Termux 应用。
         try {
             val i = Intent()
-            i.setClassName("com.termux", "com.termux.app.TermuxActivity")
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            i.setClassName(context.currentActivity, "com.rk.pycode.terminal.PyCodeTerminalActivity")
+            i.putExtra("cwd", "/sdcard/PythonProjects")
             context.currentActivity.startActivity(i)
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            // 兜底：内置终端起不来就直接开 Termux
+            try {
+                val i = Intent()
+                i.setClassName("com.termux", "com.termux.app.TermuxActivity")
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.currentActivity.startActivity(i)
+            } catch (_: Throwable) {
+            }
         }
     }
 
